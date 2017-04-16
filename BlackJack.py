@@ -1,4 +1,5 @@
 import random, itertools
+import numpy as np
 
 SUITS = {0 : "Heart", 1 : "Club", 2 : "Diamond", 3 : "Spade"}
 RANKS = {0 : 'Ace', 9 : 'Jack', 10 : 'Queen', 11 : 'King' }
@@ -14,9 +15,8 @@ class Card:
     def __str__(self):
         return "< CARD : Suit:{0}, Rank:{1} >".format(self.suit, self.rank)
 
+# FIXME The deck is an infinite deck so cards should be replaced.
 class Deck:
-
-
     def __init__(self,numOfDecks=1):
         self.deck = []
         for i in range(numOfDecks):
@@ -53,17 +53,24 @@ class Deck:
         return self.deck.pop()
 
 class Player:
-    def __init__(self,deck):
+    def __init__(self,deck,policy):
         self.faceDown = deck.draw()
+        #This card is visible to the agent when held by the dealer.
         self.faceUp = deck.draw()
         self.drawnCards = []
+        self.policy = policy
+
+    # Draw a card from the deck.
     def hit(self,deck):
         self.drawnCards.append(deck.draw())
 
-    def stay(self):
-        print 'implement me'
+    def play(self, deck):
+        score = self.getScore()
+        action = self.policy[score]
+        if action == 0:
+            self.hit(deck)
 
-    def score(self):
+    def getScore(self):
         score = 0
         aces = 0
         cards = [self.facedown, self.faceup, self.drawnCards]
@@ -76,40 +83,56 @@ class Player:
             else:
                 score += 10
         # aces have a value of 1 or 11
-        # XXX: What happens when I have Ace, King, Ace?
         if aces > 0:
-            for ace in range(aces):
-                if score + 11 < 22:
-                    score += 11
-                else:
-                    score += 1
+            for i in range(aces):
+                #add aces to score initially all valued 11. Toggle values to 1.
+                scoreWithAces = score + 11*(aces - i) + 1*i
+                if scoreWithAces < 22:
+                    return scoreWithAces
+            score = score + aces
         return score
 
-'''class Dealer(Player):
-    #Dealer draws a faceup and facedown card first.
+dealerPolicy = np.zeros(22)
+for i in range(17,22):
+    dealerPolicy[i] = 1
+
+# TODO Find the agent policy in Suttons book.
+playerPolicy = np.zeros(22)
 
 
-
-class Agent:'''
-
-
-class BlackJackEnvironment:
+class BlackJack:
     def __init__(self):
         temp = 0
 
     # i.e. play a hand of blackjack.
-    def playEpisode(self):
+    def playEpisode(self,iterations=-1,):
         deck = Deck()
         #Dealer draws first
-        dealer = Player(deck)
+        dealer = Player(deck,dealerPolicy)
         #Agent draws second.
-        player = Player(deck)
-        while(True):
+        agent = Player(deck, playerPolicy)
+        agent.play(deck)
+        dealer.play(deck)
+        reward = self.scoreHand()
 
-
-    def bust(self, player):
-        if player.score() > 21:
-            print "Implement Bust!"
+    def scoreHand(self, player, dealer):
+        agentScore = agent.getScore()
+        dealerScore = dealer.getScore()
+        #If the agent busts reward is -1.
+        if agentScore > 21:
+            return -1
+        #If the dealer busts the agent wins; reward = +1
+        elif dealerScore > 21:
+            return 1
+        #Score is tied; reward = 0
+        elif dealerScore == agentScore:
+            return 0
+        elif dealerScore > agentScore:
+            return -1
+        elif agentScore > dealerScore:
+            return 1
+        else:
+            print "Something went wrong in BlackJack.scoreHand()"
 
 import unittest
 
@@ -143,7 +166,6 @@ class TestDeck(unittest.TestCase):
         card = Card(1,1)
         index = deck.findCard(card)
         self.assertEqual(card, deck.getCard(index))
-
 
     def testCardRemoval(self):
         deck = Deck()
