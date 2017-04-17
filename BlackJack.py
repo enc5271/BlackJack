@@ -42,6 +42,7 @@ class Deck:
         else:
             return index
 
+    # This is unused in the infinite deck.
     def removeCard(self,card):
         index = self.findCard(card)
         if index > 0:
@@ -49,8 +50,9 @@ class Deck:
         else:
             "Something went wrong in Deck.removeCard!"
 
+    #This is an infinited deck i.e. draw with replacement.
     def draw(self):
-        return self.deck.pop()
+        return random.choice(self.deck)
 
 class Player:
     def __init__(self,deck,policy):
@@ -64,17 +66,25 @@ class Player:
     def hit(self,deck):
         self.drawnCards.append(deck.draw())
 
+    def bust(self):
+        return self.getScore() > 21
+
     def play(self, deck):
         score = self.getScore()
         action = self.policy[score]
         if action == 0:
             self.hit(deck)
+            return 0
+        else:
+            return 1
+
 
     def getScore(self):
         score = 0
         aces = 0
-        cards = [self.facedown, self.faceup, self.drawnCards]
-        cards = list(itertools.chain.from_iterable(cards))
+        cards = self.drawnCards
+        cards.append(self.faceUp)
+        cards.append(self.faceDown)
         for card in cards:
             if 0 < card.rank < 9:
                 score += card.rank
@@ -92,30 +102,40 @@ class Player:
             score = score + aces
         return score
 
-dealerPolicy = np.zeros(22)
-for i in range(17,22):
-    dealerPolicy[i] = 1
-
-# TODO Find the agent policy in Suttons book.
-playerPolicy = np.zeros(22)
 
 
 class BlackJack:
-    def __init__(self):
-        temp = 0
+    def __init__(self,agentPolicy, dealerPolicy):
+        self.agentPolicy = agentPolicy
+        self.dealerPolicy = dealerPolicy
 
     # i.e. play a hand of blackjack.
-    def playEpisode(self,iterations=-1,):
+    def playEpisode(self):
         deck = Deck()
         #Dealer draws first
-        dealer = Player(deck,dealerPolicy)
+        dealer = Player(deck,self.dealerPolicy)
         #Agent draws second.
-        agent = Player(deck, playerPolicy)
-        agent.play(deck)
-        dealer.play(deck)
-        reward = self.scoreHand()
+        agent = Player(deck, self.agentPolicy)
+        states = [agent.getScore()]
+        # FIXME should be in a loop. loop until bust or sticks.
+        while(True):
+            stay = agent.play(deck)
+            if stay:
+                break
+            elif agent.bust():
+                break
+            else:
+                states.append(agent.getScore())
+        while(True):
+            stay = dealer.play(deck)
+            if stay:
+                break
+            elif agent.bust():
+                break
+        reward = self.scoreHand(agent,dealer)
+        return states,reward
 
-    def scoreHand(self, player, dealer):
+    def scoreHand(self, agent, dealer):
         agentScore = agent.getScore()
         dealerScore = dealer.getScore()
         #If the agent busts reward is -1.
@@ -177,9 +197,20 @@ class TestDeck(unittest.TestCase):
         deck = Deck()
         card = deck.draw()
         print card
-        self.assertEqual(deck.findCard(card),-1)
-        self.assertEqual(deck.cardCount(),51)
+        self.assertNotEqual(deck.findCard(card),-1)
+        self.assertEqual(deck.cardCount(),52)
 
+class TestBlackJack(unittest.TestCase):
+    def testEpisode(self):
+        #Normally this is passed from MonteCarlo.py so I had to create it here for testing.
+        dealerPolicy = np.zeros(22)
+        for i in range(17,22):
+            dealerPolicy[i] = 1
+        # TODO Find the agent policy in Suttons book.
+        playerPolicy = np.zeros(22)
+
+        game = BlackJack(playerPolicy, dealerPolicy)
+        self.assertTrue(-1 <= game.playEpisode() <=1)
 
 
 
